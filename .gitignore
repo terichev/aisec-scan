@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test outputs
+*.sarif
+report.md
+report.json
+
+# Temp files
+*.tmp
+*.bak

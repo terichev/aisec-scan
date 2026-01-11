@@ -1,0 +1,50 @@
+# AI IDE Security Scan - Pre-commit Hook Example
+#
+# Add this to your repository as .pre-commit-config.yaml
+# Then run: pre-commit install
+#
+# This will scan for AI IDE vulnerabilities before each commit.
+
+repos:
+  # aisec-scan - AI IDE Security Scanner
+  - repo: local
+    hooks:
+      - id: aisec-scan
+        name: AI IDE Security Scan
+        description: Detect prompt injection vulnerabilities in AI IDE configs
+        entry: bash -c 'command -v aisec-scan &>/dev/null && aisec-scan --quiet . || echo "aisec-scan not installed, skipping"'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+  # Optional: Also check for secrets (recommended)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
+  # Optional: Check for Unicode anomalies in all text files
+  - repo: local
+    hooks:
+      - id: check-unicode
+        name: Check for hidden Unicode characters
+        description: Detect zero-width characters that could contain hidden instructions
+        entry: bash -c 'grep -rPn "[\x{200B}-\x{200D}\x{FEFF}\x{202A}-\x{202E}]" . --include="*.md" --include="*.json" --include="*.yml" --include="*.yaml" 2>/dev/null && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+        types: [text]
+
+# Usage:
+#
+# 1. Install pre-commit:
+#    pip install pre-commit
+#
+# 2. Install hooks:
+#    pre-commit install
+#
+# 3. (Optional) Run manually:
+#    pre-commit run --all-files
+#
+# 4. (Optional) Install aisec-scan globally:
+#    curl -fsSL https://raw.githubusercontent.com/terichev/aisec-scan/main/install.sh | bash

@@ -1,0 +1,82 @@
+# AI IDE Security Scan - GitHub Actions Example
+#
+# Add this to your repository as .github/workflows/aisec-scan.yml
+# This will scan your repository on every push and pull request
+# and upload results to GitHub Security tab (SARIF)
+
+name: AI IDE Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  # Optional: run on schedule
+  # schedule:
+  #   - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  security-scan:
+    name: Scan for AI IDE vulnerabilities
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write  # Required for SARIF upload
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install aisec-scan
+        run: |
+          # Pin to specific version for reproducibility
+          curl -fsSL https://raw.githubusercontent.com/terichev/aisec-scan/v2.0.0/scan.sh \
+            -o /usr/local/bin/aisec-scan
+          chmod +x /usr/local/bin/aisec-scan
+
+      - name: Run security scan
+        id: scan
+        run: |
+          set +e  # Don't exit on error
+          aisec-scan -f sarif -o results.sarif .
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          # Create empty SARIF if scan failed before generating output
+          if [[ ! -f results.sarif ]]; then
+            echo '{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":"aisec-scan","version":"2.0.0"}},"results":[]}]}' > results.sarif
+          fi
+          exit 0  # Always succeed to allow SARIF upload
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: ai-ide-security
+
+      - name: Check scan results
+        if: steps.scan.outputs.exit_code == '1'
+        run: |
+          echo "::error::Critical AI IDE security vulnerabilities found!"
+          echo "Review the Security tab for details."
+          exit 1
+
+      # Optional: Post comment on PR with findings
+      - name: Generate markdown report
+        if: github.event_name == 'pull_request'
+        run: aisec-scan -f markdown -o report.md . || true
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && hashFiles('report.md') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
